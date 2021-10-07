@@ -402,7 +402,7 @@ def capped_distance(reference, configuration, max_cutoff, min_cutoff=None,
     method = _determine_method(reference, configuration, max_cutoff,
                                min_cutoff=min_cutoff, box=box, method=method)
     return method(reference, configuration, max_cutoff, min_cutoff=min_cutoff,
-                  box=box, return_distances=return_distances)
+                  box=box, return_distances=return_distances, backend="openmp")
 
 
 def _determine_method(reference, configuration, max_cutoff, min_cutoff=None,
@@ -479,7 +479,7 @@ def _determine_method(reference, configuration, max_cutoff, min_cutoff=None,
 @check_coords('reference', 'configuration', enforce_copy=False,
               reduce_result_if_single=False, check_lengths_match=False)
 def _bruteforce_capped(reference, configuration, max_cutoff, min_cutoff=None,
-                       box=None, return_distances=True):
+                       box=None, return_distances=True, backend="serial"):
     """Capped distance evaluations using a brute force method.
 
     Computes and returns an array containing pairs of indices corresponding to
@@ -514,6 +514,8 @@ def _bruteforce_capped(reference, configuration, max_cutoff, min_cutoff=None,
         ``[lx, ly, lz, alpha, beta, gamma]``.
     return_distances : bool, optional
         If set to ``True``, distances will also be returned.
+    backend: string, optional
+        Run in "serial" or "openmp" (if available)
 
     Returns
     -------
@@ -536,7 +538,7 @@ def _bruteforce_capped(reference, configuration, max_cutoff, min_cutoff=None,
     distances = np.empty((0,), dtype=np.float64)
 
     if len(reference) > 0 and len(configuration) > 0:
-        _distances = distance_array(reference, configuration, box=box)
+        _distances = distance_array(reference, configuration, box=box, backend=backend)
         if min_cutoff is not None:
             mask = np.where((_distances <= max_cutoff) & \
                             (_distances > min_cutoff))

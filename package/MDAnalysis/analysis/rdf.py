@@ -295,6 +295,8 @@ class InterRDF(AnalysisBase):
           array.
     verbose : bool (optional)
           Show detailed progress of the calculation if set to ``True``
+    method : string (optional)
+          Underlying distance calculation method
 
     Example
     -------
@@ -326,7 +328,7 @@ class InterRDF(AnalysisBase):
        :class:`~MDAnalysis.analysis.AnalysisBase`.
     """
     def __init__(self, g1, g2,
-                 nbins=75, range=(0.0, 15.0), exclusion_block=None,
+                 nbins=75, range=(0.0, 15.0), exclusion_block=None, method=None,
                  **kwargs):
         super(InterRDF, self).__init__(g1.universe.trajectory, **kwargs)
         self.g1 = g1
@@ -335,6 +337,7 @@ class InterRDF(AnalysisBase):
 
         self.rdf_settings = {'bins': nbins,
                              'range': range}
+        self.method = method
         self._exclusion_block = exclusion_block
 
     def _prepare(self):
@@ -355,7 +358,8 @@ class InterRDF(AnalysisBase):
         pairs, dist = distances.capped_distance(self.g1.positions,
                                                 self.g2.positions,
                                                 self._maxrange,
-                                                box=self.u.dimensions)
+                                                box=self.u.dimensions,
+                                                method=self.method)
         # Maybe exclude same molecule distances
         if self._exclusion_block is not None:
             idxA = pairs[:, 0]//self._exclusion_block[0]

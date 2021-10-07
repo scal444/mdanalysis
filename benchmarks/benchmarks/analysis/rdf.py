@@ -16,13 +16,15 @@ class SimpleRdfBench(object):
 
     params = ([20,75,200],
               [[0,5], [0,15], [0,20]],
-              [1, 100, 1000, 10000])
+              [1, 100, 1000, 2000],
+              ['bruteforce'])
 
     param_names = ['nbins',
                    'range_val',
-                   'natoms']
+                   'natoms',
+                   'method']
 
-    def setup(self, nbins, range_val, natoms):
+    def setup(self, nbins, range_val, natoms, method):
         
         self.sel_str = 'name OW'
 
@@ -39,9 +41,10 @@ class SimpleRdfBench(object):
         self.rdf = InterRDF(g1=self.sel,
                             g2=self.sel,
                             nbins=nbins,
-                            range=range_val)
+                            range=range_val,
+                            method=method)
 
-    def time_interrdf(self, nbins, range_val, natoms):
+    def time_interrdf(self, nbins, range_val, natoms, method):
         """Benchmark a full trajectory parse
         by MDAnalysis.analysis.rdf.InterRDF
         """
