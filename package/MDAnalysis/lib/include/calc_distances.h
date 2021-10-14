@@ -567,6 +567,25 @@ void _coord_transform(coordinate* coords, int numCoords, double* box)
   }
 }
 
+#ifdef PARALLEL
+// Calculates the chunk of a single OpenMP thread given the total number of threads and elements.
+static int computeChunkSize(const int numThreads, const int numElements)
+{
+    const int naiveChunkSize = numElements / numThreads;
+    return numThreads * naiveChunkSize == numElements ? naiveChunkSize : naiveChunkSize + 1;
+}
+
+/*
+static int numOmpThreads() {
+  int numThreads = 1;
+  #pragma omp parallel shared(numThreads)
+  {
+    #pragma omp single
+    numThreads = omp_get_num_threads();
+  }
+}
+*/
+#endif
 static void _calc_bond_distance(coordinate* atom1, coordinate* atom2,
                                 int numatom, double* distances)
 {
@@ -575,8 +594,26 @@ static void _calc_bond_distance(coordinate* atom1, coordinate* atom2,
   double rsq;
 
 #ifdef PARALLEL
-#pragma omp parallel for private(i, dx, rsq) shared(distances)
-#endif
+  const int chunkSize = computeChunkSize(omp_get_max_threads(), numatom);
+
+  //printf("natoms %d\n", numatom);
+  //printf("chunk size %d\n", chunkSize);
+  //printf("nthreads %d\n", omp_get_max_threads());
+
+#pragma omp parallel for private(i,dx, rsq, atom1, atom2, distances, numatom)
+  for (i=0; i<numatom; i+= chunkSize ) {
+    const int stopIndex = i + chunkSize <= numatom ? i+ chunkSize : numatom;
+    //printf("thread! at i = %d, stopIndex = %d\n", i, stopIndex);
+
+    for (int j = i; j < stopIndex; j++) {
+        dx[0] = atom1[j][0] - atom2[j][0];
+        dx[1] = atom1[j][1] - atom2[j][1];
+        dx[2] = atom1[j][2] - atom2[j][2];
+        rsq = (dx[0]*dx[0])+(dx[1]*dx[1])+(dx[2]*dx[2]);
+        *(distances+j) = sqrt(rsq);
+    }
+  }
+#else
   for (i=0; i<numatom; i++) {
     dx[0] = atom1[i][0] - atom2[i][0];
     dx[1] = atom1[i][1] - atom2[i][1];
@@ -584,6 +621,8 @@ static void _calc_bond_distance(coordinate* atom1, coordinate* atom2,
     rsq = (dx[0]*dx[0])+(dx[1]*dx[1])+(dx[2]*dx[2]);
     *(distances+i) = sqrt(rsq);
   }
+#endif
+
 }
 
 static void _calc_bond_distance_ortho(coordinate* atom1, coordinate* atom2,

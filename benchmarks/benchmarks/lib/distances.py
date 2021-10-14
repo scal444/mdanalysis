@@ -9,7 +9,7 @@ class BondedDistancesBench(object):
     """Benchmarks for MDAnalysis.lib.distances functions.
     """
 
-    params = ([10, 100, 1000, 10000, 100000, 1000000],  ['serial', 'openmp'])
+    params = ([10, 100, 1000, 10000, 100000, 1000000, 10000000],  ['serial', 'openmp'])
     param_names = ['num_atoms', 'backend']
 
     def setup(self, num_atoms, backend):
