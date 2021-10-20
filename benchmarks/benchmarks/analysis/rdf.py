@@ -16,7 +16,7 @@ class SimpleRdfBench(object):
 
     params = ([20,75,200],
               [[0,5], [0,15], [0,20]],
-              [1, 100, 1000, 10000])
+              [1000, 2000])
 
     param_names = ['nbins',
                    'range_val',

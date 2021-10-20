@@ -29,6 +29,8 @@
 # cython: wraparound=False
 # cython: initializedcheck=False
 # cython: embedsignature=True
+# cython: linetrace=True
+# distutils: define_macros=CYTHON_TRACE_NOGIL=1
 
 """
 Neighbor search library --- :mod:`MDAnalysis.lib.nsgrid`
@@ -472,7 +474,7 @@ cdef class FastNS(object):
 
         return cx + cy * self.cell_offsets[1] + cz * self.cell_offsets[2]
 
-    cdef double calc_distsq(self, const float* a, const float* b) nogil:
+    cdef inline double calc_distsq(self, const float* a, const float* b) nogil:
         cdef double dx[3]
 
         dx[0] = a[0] - b[0]
