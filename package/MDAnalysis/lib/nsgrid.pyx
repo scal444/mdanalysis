@@ -78,10 +78,12 @@ not reflect in the results.
 Classes
 -------
 """
+import itertools
 import numpy as np
 
 from libcpp.vector cimport vector
 from libc cimport math
+from libc.stdio cimport printf
 
 DEF END = -1
 
@@ -202,14 +204,16 @@ cdef class FastNS(object):
 
     cdef int[3] ncells  # individual cells in every dimension
     cdef int[3] cell_offsets  # Cell Multipliers
+
+    cdef int[:] cell_start_indices  # Starting index of each cell in coords_bbox
+    cdef int[::1] head_id  # first coord id for a given cell
+
     # cellsize MUST be double precision, otherwise coord2cellid() may fail for
     # coordinates very close to the upper box boundaries! See Issue #2132
     # diagonal stores the cell width, off diagonal elements are the "tilt"
     # i.e. cellsize[3] is the dxdy tilt (box[XY] / box[YY])
     cdef double[9] cellsize
 
-    cdef int[::1] head_id  # first coord id for a given cell
-    cdef int[::1] next_id  # next coord id after a given cell
     cdef bint triclinic
     cdef float[6] dimensions
     cdef float[3] half_dimensions
@@ -388,15 +392,16 @@ cdef class FastNS(object):
         coords : np.ndarray float of shape (ncoords, 3)
             Coordinates to populate the box
         """
-        cdef int i, j
+        cdef int i, j, reordered_index
+        cdef int[::1] next_id  # next coord id after a given cell
 
         # Linked list for each cell
         # Starting coordinate index for each cell (END if empty cell)
         self.head_id = np.full(self.cell_offsets[2] * self.ncells[2], END, dtype=np.int32, order='C')
         # Next coordinate index in cell for each coordinate (END if end of sequence)
-        self.next_id = np.full(coords.shape[0], END, dtype=np.int32, order='C')
+        next_id = np.full(coords.shape[0], END, dtype=np.int32, order='C')
 
-        self.coords_bbox = coords.copy()
+        self.coords_bbox = np.full(coords.size(), 0, dtype=float, order = 'C')
         with nogil:
             if self.triclinic:
                 _triclinic_pbc(<coordinate*>&self.coords_bbox[0][0],
@@ -407,10 +412,39 @@ cdef class FastNS(object):
                            self.coords_bbox.shape[0],
                            &self.dimensions[0])
 
-            for i in range(self.coords_bbox.shape[0]):
-                j = self.coord2cellid(&self.coords_bbox[i][0])
-                self.next_id[i] = self.head_id[j]
-                self.head_id[j] = i
+        for i in range(self.coords_bbox.shape[0]):
+            j = self.coord2cellid(&coords[i][0])
+            next_id[i] = self.head_id[j]
+            self.head_id[j] = i
+
+        # Now reorder coords into coords_bbox.
+        reordered_index = 0
+        # First loop is over all cell starting indices.
+        for i in range(self.head_id.size):
+            j = self.head_id[i]
+            # Handle the case of empty cells
+            if j == END:
+                continue
+            # Once we have the ID, set head_id to point to the correct position in the reordered array
+            self.head_id[i] = reordered_index
+            # Emulating a do-while loop. We always want to work on the current index, so a strict while loop
+            # would terminate one early.
+            while True:
+                self.coords_bbox[reordered_index, :] = coords[j, :]
+                reordered_index += 1
+                if next_id[j] == END:
+                    break
+                j = next_id[j]
+        print(locals())
+        #printf("pack grid results\n")
+        #printf("locals\n")
+        #printf(locals())
+        #printf("\n\nglobals\n")
+        #printf(globals())
+
+
+
+
 
     cdef int coord2cellid(self, const float* coord) nogil:
         """Finds the cell-id for the given coordinate
@@ -524,6 +558,7 @@ cdef class FastNS(object):
         cdef int i, j, size_search
         cdef int cx, cy, cz
         cdef int cellid
+        cdef int cellcount
         cdef int xi, yi, zi
         cdef int cellcoord[3]
         cdef float tmpcoord[3]
@@ -562,15 +597,13 @@ cdef class FastNS(object):
 
                             if cellid == END:  # out of bounds
                                 continue
-                            # for loop over atoms in searchcoord
-                            j = self.head_id[cellid]
-                            while (j != END):
+
+                            for j in range(self.head_id[cellid], self.head_id[cellid + 1]):
                                 d2 = self.calc_distsq(&tmpcoord[0],
                                                       &self.coords_bbox[j][0])
                                 if d2 <= cutoff2:
                                     # place search_coords then self.bbox_coords
                                     results.add_neighbors(i, j, d2)
-                                j = self.next_id[j]
         return results
 
     def self_search(self):
@@ -605,16 +638,13 @@ cdef class FastNS(object):
                 for cz in range(self.ncells[2]):
                     ci = self.cellxyz2cellid(cx, cy, cz)
 
-                    i = self.head_id[ci]
-                    while (i != END):
+                    for i in range(self.head_id[ci], self.head_id[ci + 1]):
                         # pairwise within this cell
-                        j = self.next_id[i]
-                        while (j != END):
+                        for j in range(i, self.head_id[i + 1]):
                             d2 = self.calc_distsq(&self.coords_bbox[i][0],
                                                   &self.coords_bbox[j][0])
                             if d2 <= cutoff2:
                                 results.add_neighbors(i, j, d2)
-                            j = self.next_id[j]
 
                         # loop over 13 neighbouring cells
                         for nj in range(13):
@@ -626,15 +656,10 @@ cdef class FastNS(object):
                             if cj == END:
                                 continue
 
-                            j = self.head_id[cj]
-                            while (j != END):
+                            for j in range(self.head_id[cj], self.head_id[cj + 1]):
+
                                 d2 = self.calc_distsq(&self.coords_bbox[i][0],
                                                       &self.coords_bbox[j][0])
                                 if d2 <= cutoff2:
                                     results.add_neighbors(i, j, d2)
-                                j = self.next_id[j]
-
-                        # move to next position in cell *ci*
-                        i = self.next_id[i]
-
         return results

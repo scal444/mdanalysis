@@ -94,7 +94,7 @@ try:
               "parallelization module".format(
                Cython.__version__, required_version))
         cython_found = False
-    cython_linetrace = bool(os.environ.get('CYTHON_TRACE_NOGIL', False))
+    cython_linetrace = bool(os.environ.get('CYTHON_TRACE_NOGIL', True))
 except ImportError:
     cython_found = False
     if not is_release:
@@ -443,7 +443,12 @@ def extensions(config):
 
 
     cython_generated = []
+
     if use_cython:
+        from Cython.Compiler.Options import get_directive_defaults
+        directive_defaults = get_directive_defaults()
+        directive_defaults['linetrace'] = True
+        directive_defaults['binding'] = True
         extensions = cythonize(
             pre_exts,
             compiler_directives={'linetrace': cython_linetrace,
@@ -452,6 +457,8 @@ def extensions(config):
         )
         if cython_linetrace:
             print("Cython coverage will be enabled")
+        else:
+            print("No cython linetrace")
         for pre_ext, post_ext in zip(pre_exts, extensions):
             for source in post_ext.sources:
                 if source not in pre_ext.sources:
